@@ -180,6 +180,16 @@ AWS credentials come from the standard boto3 chain (env vars, `~/.aws/credential
 2. **Connection test** - `dbt debug` against a live Lambda (embucket-lambda-sturukin_10g).
 3. **Basic operations** - `dbt run` with a simple model, `dbt seed`, `dbt test`.
 
+## Timeout / Retry Behavior
+
+The default Snowflake connector has a 60-second client-side timeout and retries with the same `request_id` and an incremented `retry_count`. This is not needed with Lambda invoke:
+
+- `boto3` Lambda invoke blocks until the function completes (up to Lambda's 15-minute max)
+- Lambda execution timeout is configured on the function itself (currently 900s for sturukin lambdas)
+- No client-side timeout/retry loop required - the Lambda either completes or times out server-side
+
+The adapter should set a generous `read_timeout` on the boto3 config (matching Lambda's max timeout) and not implement Snowflake-style retry logic.
+
 ## Limitations / Future Work
 
 - 6MB synchronous invoke response limit (sufficient for dbt's typical DDL/metadata patterns)
