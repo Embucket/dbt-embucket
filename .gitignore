@@ -6,3 +6,4 @@ build/
 tests/dbt_project/target/
 tests/dbt_project/logs/
 tests/dbt_project/.user.yml
+tests/snowplow_web/work/

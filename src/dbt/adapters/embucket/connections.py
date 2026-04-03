@@ -2,6 +2,7 @@ import json
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, List, Optional, Tuple, Union
 
 import boto3
@@ -148,9 +149,46 @@ class LambdaCursor:
             for col in rowtype
         ]
 
-        self._rows = data.get("rowset") or []
+        # Build type map for coercion (timestamp strings -> datetime, etc.)
+        type_map = {}
+        for i, col in enumerate(rowtype):
+            col_type = col.get("type", "text")
+            if col_type in ("timestamp_ntz", "timestamp_ltz", "timestamp_tz", "timestamp"):
+                type_map[i] = "timestamp"
+            elif col_type == "boolean":
+                type_map[i] = "boolean"
+
+        raw_rows = data.get("rowset") or []
+        self._rows = [self._coerce_row(row, type_map) for row in raw_rows]
         self._row_index = 0
         self.rowcount = data.get("total", len(self._rows))
+
+    @staticmethod
+    def _coerce_row(row: List, type_map: dict) -> List:
+        """Coerce JSON values to Python types based on column metadata."""
+        if not type_map:
+            return row
+        coerced = list(row)
+        for i, target_type in type_map.items():
+            if i >= len(coerced) or coerced[i] is None:
+                continue
+            val = coerced[i]
+            if target_type == "timestamp" and isinstance(val, str):
+                try:
+                    # Embucket returns timestamps as epoch seconds (e.g. "1757843994.302000")
+                    epoch = float(val)
+                    coerced[i] = datetime.utcfromtimestamp(epoch)
+                except (ValueError, OSError):
+                    # Fall back to ISO format parsing
+                    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                        try:
+                            coerced[i] = datetime.strptime(val, fmt)
+                            break
+                        except ValueError:
+                            continue
+            elif target_type == "boolean" and isinstance(val, str):
+                coerced[i] = val.upper() in ("TRUE", "1", "T")
+        return coerced
 
     def fetchall(self) -> List[List]:
         rows = self._rows[self._row_index:]

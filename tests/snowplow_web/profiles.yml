@@ -1,0 +1,12 @@
+snowplow_web:
+  target: embucket
+  outputs:
+    embucket:
+      type: embucket
+      function_arn: "{{ env_var('EMBUCKET_FUNCTION_ARN', 'arn:aws:lambda:us-east-2:767397688925:function:embucket-lambda-sturukin_10g') }}"
+      account: embucket
+      user: embucket
+      password: embucket
+      database: demo
+      schema: public_snowplow_manifest
+      threads: 1
