@@ -1,0 +1,8 @@
+name: embucket_test
+version: 0.1.0
+config-version: 2
+profile: embucket_test
+
+dispatch:
+  - macro_namespace: dbt
+    search_order: ['embucket', 'snowflake', 'dbt']

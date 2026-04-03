@@ -9,4 +9,5 @@ Plugin = AdapterPlugin(
     adapter=EmbucketAdapter,
     credentials=EmbucketCredentials,
     include_path=embucket.PACKAGE_PATH,
+    dependencies=["snowflake"],
 )
