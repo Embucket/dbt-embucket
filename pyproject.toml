@@ -17,6 +17,9 @@ dependencies = [
 [tool.hatch.version]
 path = "src/dbt/adapters/embucket/__version__.py"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/dbt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --color=yes"
