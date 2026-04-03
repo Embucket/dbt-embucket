@@ -1,13 +1,13 @@
 import json
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Any, List, Optional, Tuple, Union
 
 import boto3
 from botocore.config import Config as BotoConfig
 
-from dbt.adapters.contracts.connection import AdapterResponse, Connection, Credentials
+from dbt.adapters.contracts.connection import AdapterResponse, Connection
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.snowflake.connections import SnowflakeConnectionManager, SnowflakeCredentials
 from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
@@ -67,7 +67,7 @@ def build_login_payload(
     }
 
 
-def build_query_payload(sql: str, token: str, sequence_id: int = 0) -> dict:
+def build_query_payload(sql: str, token: str) -> dict:
     """Build a Lambda Function URL event for the Embucket query endpoint."""
     request_id = str(uuid.uuid4())
     body = json.dumps({"sqlText": sql})
@@ -330,23 +330,49 @@ class EmbucketConnectionManager(SnowflakeConnectionManager):
         current = []
         in_string = False
         string_char = None
+        i = 0
+        length = len(sql)
 
-        for char in sql:
+        while i < length:
+            char = sql[i]
+
             if in_string:
                 current.append(char)
                 if char == string_char:
                     in_string = False
+                i += 1
             elif char in ("'", '"'):
                 in_string = True
                 string_char = char
                 current.append(char)
+                i += 1
+            elif char == "-" and i + 1 < length and sql[i + 1] == "-":
+                # Line comment: consume until end of line
+                while i < length and sql[i] != "\n":
+                    current.append(sql[i])
+                    i += 1
+            elif char == "/" and i + 1 < length and sql[i + 1] == "*":
+                # Block comment: consume until */
+                current.append(sql[i])
+                current.append(sql[i + 1])
+                i += 2
+                while i < length:
+                    if sql[i] == "*" and i + 1 < length and sql[i + 1] == "/":
+                        current.append(sql[i])
+                        current.append(sql[i + 1])
+                        i += 2
+                        break
+                    current.append(sql[i])
+                    i += 1
             elif char == ";":
                 query = "".join(current).strip()
                 if query:
                     queries.append(query)
                 current = []
+                i += 1
             else:
                 current.append(char)
+                i += 1
 
         # Don't forget the last query (may not end with semicolon)
         last = "".join(current).strip()

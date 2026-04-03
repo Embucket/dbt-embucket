@@ -226,7 +226,6 @@ class TestLambdaInvokePayload:
         payload = build_query_payload(
             sql="SELECT 1",
             token="my-jwt-token",
-            sequence_id=1,
         )
         assert payload["version"] == "2.0"
         assert payload["rawPath"] == "/queries/v1/query-request"
@@ -234,3 +233,33 @@ class TestLambdaInvokePayload:
         assert payload["headers"]["authorization"] == 'Snowflake Token="my-jwt-token"'
         body = json.loads(payload["body"])
         assert body["sqlText"] == "SELECT 1"
+
+
+class TestSplitQueries:
+    def test_simple_split(self):
+        from dbt.adapters.embucket.connections import EmbucketConnectionManager
+        result = EmbucketConnectionManager._split_queries("SELECT 1; SELECT 2")
+        assert result == ["SELECT 1", "SELECT 2"]
+
+    def test_semicolon_in_line_comment(self):
+        from dbt.adapters.embucket.connections import EmbucketConnectionManager
+        sql = "-- this is a comment; not a split\nSELECT 1; SELECT 2"
+        result = EmbucketConnectionManager._split_queries(sql)
+        assert result == ["-- this is a comment; not a split\nSELECT 1", "SELECT 2"]
+
+    def test_semicolon_in_block_comment(self):
+        from dbt.adapters.embucket.connections import EmbucketConnectionManager
+        sql = "SELECT /* comment; here */ 1; SELECT 2"
+        result = EmbucketConnectionManager._split_queries(sql)
+        assert result == ["SELECT /* comment; here */ 1", "SELECT 2"]
+
+    def test_semicolon_in_string(self):
+        from dbt.adapters.embucket.connections import EmbucketConnectionManager
+        sql = "SELECT 'hello; world'; SELECT 2"
+        result = EmbucketConnectionManager._split_queries(sql)
+        assert result == ["SELECT 'hello; world'", "SELECT 2"]
+
+    def test_no_trailing_semicolon(self):
+        from dbt.adapters.embucket.connections import EmbucketConnectionManager
+        result = EmbucketConnectionManager._split_queries("SELECT 1")
+        assert result == ["SELECT 1"]
