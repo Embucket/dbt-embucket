@@ -1,0 +1,22 @@
+fixed:
+  type: embucket
+prompts:
+  function_arn:
+    hint: 'arn:aws:lambda:REGION:ACCOUNT:function:FUNCTION_NAME'
+  account:
+    hint: 'Embucket account name'
+    default: 'embucket'
+  user:
+    hint: 'Embucket username'
+    default: 'embucket'
+  password:
+    hint: 'Embucket password'
+    hide_input: true
+  database:
+    hint: 'default database'
+  schema:
+    hint: 'default schema'
+  threads:
+    hint: '1 or more'
+    type: 'int'
+    default: 1

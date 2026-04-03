@@ -1,0 +1,9 @@
+config-version: 2
+name: embucket
+version: 0.1.0
+
+macro-paths: ["macros"]
+
+dispatch:
+  - macro_namespace: dbt
+    search_order: ['embucket', 'snowflake', 'dbt']
