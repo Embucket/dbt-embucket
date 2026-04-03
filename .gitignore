@@ -1,0 +1,8 @@
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+tests/dbt_project/target/
+tests/dbt_project/logs/
+tests/dbt_project/.user.yml
