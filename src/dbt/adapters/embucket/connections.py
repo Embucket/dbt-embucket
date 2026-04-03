@@ -11,6 +11,7 @@ from dbt.adapters.contracts.connection import AdapterResponse, Connection
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.snowflake.connections import SnowflakeConnectionManager, SnowflakeCredentials
 from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
+from dbt.adapters.embucket.__version__ import version as adapter_version
 
 logger = AdapterLogger("Embucket")
 
@@ -39,7 +40,7 @@ def build_login_payload(
             "LOGIN_NAME": user,
             "PASSWORD": password,
             "CLIENT_APP_ID": "dbt-embucket",
-            "CLIENT_APP_VERSION": "0.1.0",
+            "CLIENT_APP_VERSION": adapter_version,
             "CLIENT_ENVIRONMENT": {},
             "SESSION_PARAMETERS": {},
         }
@@ -248,6 +249,9 @@ class EmbucketConnectionManager(SnowflakeConnectionManager):
 
         creds: EmbucketCredentials = connection.credentials
 
+        if not creds.function_arn:
+            raise DbtRuntimeError("'function_arn' is required in the profile configuration")
+
         # Extract region from ARN: arn:aws:lambda:REGION:ACCOUNT:function:NAME
         arn_parts = creds.function_arn.split(":")
         region = arn_parts[3] if len(arn_parts) > 3 else "us-east-1"
@@ -307,7 +311,7 @@ class EmbucketConnectionManager(SnowflakeConnectionManager):
         except DbtRuntimeError:
             raise
         except Exception as e:
-            logger.debug("Error running SQL: {}", sql)
+            logger.debug(f"Error running SQL: {sql}")
             raise DbtRuntimeError(str(e)) from e
 
     def cancel(self, connection):
