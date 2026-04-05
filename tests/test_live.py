@@ -31,13 +31,13 @@ pytestmark = pytest.mark.skipif(
 
 FUNCTION_ARN = os.environ.get(
     "EMBUCKET_FUNCTION_ARN",
-    "arn:aws:lambda:us-east-2:767397688925:function:embucket-lambda-sturukin_10g",
+    "arn:aws:lambda:us-east-2:767397688925:function:embucket-lambadka",
 )
 
 
 class TestLiveConnection:
-    def test_connection_open_and_query(self):
-        """Test that we can open a connection and run a simple query."""
+    def _make_handle(self):
+        """Create a LambdaHandle connected to the test Lambda."""
         from dbt.adapters.embucket.connections import (
             build_login_payload,
             LambdaHandle,
@@ -47,28 +47,21 @@ class TestLiveConnection:
 
         arn_parts = FUNCTION_ARN.split(":")
         region = arn_parts[3]
-
         boto_config = BotoConfig(region_name=region, read_timeout=960)
         client = boto3.client("lambda", config=boto_config)
 
-        # Login
+        # Login via LambdaHandle (handles both buffered and streaming)
+        tmp_handle = LambdaHandle(client=client, function_arn=FUNCTION_ARN, token="")
         login_payload = build_login_payload(
-            account="embucket",
-            user="embucket",
-            password="embucket",
+            account="embucket", user="embucket", password="embucket",
         )
-        response = client.invoke(
-            FunctionName=FUNCTION_ARN,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(login_payload).encode("utf-8"),
-        )
-        result = json.loads(response["Payload"].read())
-        body = json.loads(result["body"])
+        body = json.loads(tmp_handle.invoke(login_payload))
         assert body["success"] is True
-        token = body["data"]["token"]
+        return LambdaHandle(client=client, function_arn=FUNCTION_ARN, token=body["data"]["token"])
 
-        # Query
-        handle = LambdaHandle(client=client, function_arn=FUNCTION_ARN, token=token)
+    def test_connection_open_and_query(self):
+        """Test that we can open a connection and run a simple query."""
+        handle = self._make_handle()
         cursor = handle.cursor()
         cursor.execute("SELECT 1 as num, 'hello' as greeting")
         assert cursor.rowcount == 1
@@ -102,37 +95,9 @@ class TestLiveConnection:
 
     def test_show_schemas_uses_snowflake_macro(self):
         """Verify SHOW TERSE SCHEMAS is used (Snowflake macro), not information_schema query (default)."""
-        from dbt.adapters.embucket.connections import (
-            build_login_payload,
-            LambdaHandle,
-        )
-        import boto3
-        from botocore.config import Config as BotoConfig
-
-        arn_parts = FUNCTION_ARN.split(":")
-        region = arn_parts[3]
-
-        boto_config = BotoConfig(region_name=region, read_timeout=960)
-        client = boto3.client("lambda", config=boto_config)
-
-        # Login
-        login_payload = build_login_payload(
-            account="embucket", user="embucket", password="embucket",
-            database="demo",
-        )
-        response = client.invoke(
-            FunctionName=FUNCTION_ARN,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(login_payload).encode("utf-8"),
-        )
-        result = json.loads(response["Payload"].read())
-        body = json.loads(result["body"])
-        token = body["data"]["token"]
-
-        # Run SHOW TERSE SCHEMAS (what the snowflake macro does)
-        handle = LambdaHandle(client=client, function_arn=FUNCTION_ARN, token=token)
+        handle = self._make_handle()
         cursor = handle.cursor()
-        cursor.execute("SHOW TERSE SCHEMAS IN DATABASE demo")
+        cursor.execute("SHOW TERSE SCHEMAS IN DATABASE embucket")
         assert cursor.description is not None
         col_names = [col[0] for col in cursor.description]
         assert "name" in col_names, f"Expected 'name' column in SHOW SCHEMAS output, got: {col_names}"

@@ -3,10 +3,10 @@ embucket_test:
   outputs:
     dev:
       type: embucket
-      function_arn: arn:aws:lambda:us-east-2:767397688925:function:embucket-lambda-sturukin_10g
+      function_arn: arn:aws:lambda:us-east-2:767397688925:function:embucket-lambadka
       account: embucket
       user: embucket
       password: embucket
-      database: demo
+      database: embucket
       schema: public
       threads: 1

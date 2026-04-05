@@ -224,27 +224,51 @@ class LambdaHandle:
         return LambdaCursor(handle=self)
 
     def invoke(self, payload: dict) -> str:
-        """Invoke the Lambda function and return the response body string."""
+        """Invoke the Lambda function and return the response body string.
+
+        Handles both buffered and streaming Lambda response formats:
+        - Buffered: single JSON with statusCode, headers, body
+        - Streaming: HTTP metadata JSON + null bytes + body JSON
+        """
         response = self.client.invoke(
             FunctionName=self.function_arn,
             InvocationType="RequestResponse",
             Payload=json.dumps(payload).encode("utf-8"),
         )
 
-        response_payload = json.loads(response["Payload"].read())
+        raw = response["Payload"].read()
 
         if response.get("FunctionError"):
-            error_msg = response_payload.get("errorMessage", "Lambda invocation failed")
+            try:
+                err = json.loads(raw)
+                error_msg = err.get("errorMessage", "Lambda invocation failed")
+            except (json.JSONDecodeError, ValueError):
+                error_msg = raw.decode("utf-8", errors="replace")[:200]
             raise DbtRuntimeError(f"Lambda function error: {error_msg}")
 
-        status_code = response_payload.get("statusCode", 200)
-        if status_code >= 400:
-            body = response_payload.get("body", "")
-            raise DbtRuntimeError(
-                f"Embucket returned HTTP {status_code}: {body}"
-            )
+        # Try parsing as buffered response first
+        try:
+            response_payload = json.loads(raw)
+            status_code = response_payload.get("statusCode", 200)
+            if status_code >= 400:
+                body = response_payload.get("body", "")
+                raise DbtRuntimeError(f"Embucket returned HTTP {status_code}: {body}")
+            return response_payload.get("body", "{}")
+        except json.JSONDecodeError:
+            pass
 
-        return response_payload.get("body", "{}")
+        # Streaming response: metadata + null bytes + body
+        separator = b"\x00" * 8
+        if separator in raw:
+            parts = raw.split(separator, 1)
+            metadata = json.loads(parts[0])
+            status_code = metadata.get("statusCode", 200)
+            body_str = parts[1].decode("utf-8") if len(parts) > 1 else "{}"
+            if status_code >= 400:
+                raise DbtRuntimeError(f"Embucket returned HTTP {status_code}: {body_str[:200]}")
+            return body_str
+
+        raise DbtRuntimeError(f"Unexpected Lambda response format: {raw[:200]}")
 
     def close(self) -> None:
         pass
@@ -310,19 +334,12 @@ class EmbucketConnectionManager(SnowflakeConnectionManager):
             schema=creds.schema,
         )
 
-        login_response = lambda_client.invoke(
-            FunctionName=creds.function_arn,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(login_payload).encode("utf-8"),
+        # Use a temporary handle to perform login (reuses invoke response parsing)
+        tmp_handle = LambdaHandle(
+            client=lambda_client, function_arn=creds.function_arn, token=""
         )
-        login_result = json.loads(login_response["Payload"].read())
-
-        if login_response.get("FunctionError"):
-            raise DbtRuntimeError(
-                f"Embucket login failed: {login_result.get('errorMessage', 'unknown error')}"
-            )
-
-        login_body = json.loads(login_result.get("body", "{}"))
+        login_body_str = tmp_handle.invoke(login_payload)
+        login_body = json.loads(login_body_str)
         if not login_body.get("success", False):
             raise DbtRuntimeError(
                 f"Embucket login failed: {login_body.get('message', 'unknown error')}"
