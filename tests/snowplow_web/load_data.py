@@ -26,7 +26,9 @@ def main():
     # Login
     print(f"Logging in to {args.function_arn}...")
     lp = build_login_payload(
-        account="embucket", user="embucket", password="embucket",
+        account=os.environ.get("EMBUCKET_ACCOUNT", "embucket"),
+        user=os.environ.get("EMBUCKET_USER", "embucket"),
+        password=os.environ.get("EMBUCKET_PASSWORD", "embucket"),
         database=args.database,
     )
     r = client.invoke(FunctionName=args.function_arn, InvocationType="RequestResponse",

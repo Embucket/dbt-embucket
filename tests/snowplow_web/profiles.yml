@@ -3,10 +3,10 @@ snowplow_web:
   outputs:
     embucket:
       type: embucket
-      function_arn: "{{ env_var('EMBUCKET_FUNCTION_ARN', 'arn:aws:lambda:us-east-2:767397688925:function:embucket-lambda-sturukin_10g') }}"
-      account: embucket
-      user: embucket
-      password: embucket
+      function_arn: "{{ env_var('EMBUCKET_FUNCTION_ARN') }}"
+      account: "{{ env_var('EMBUCKET_ACCOUNT', 'embucket') }}"
+      user: "{{ env_var('EMBUCKET_USER', 'embucket') }}"
+      password: "{{ env_var('EMBUCKET_PASSWORD', 'embucket') }}"
       database: demo
       schema: public_snowplow_manifest
       threads: 1

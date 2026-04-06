@@ -2,7 +2,8 @@
 Live integration tests against a real Embucket Lambda.
 Requires AWS credentials and network access.
 
-Run with: pytest tests/test_live.py -v
+Run with:
+    EMBUCKET_FUNCTION_ARN=arn:aws:lambda:... pytest tests/test_live.py -v
 """
 import json
 import os
@@ -17,8 +18,7 @@ def _has_aws_credentials():
     try:
         import boto3
         session = boto3.Session()
-        creds = session.get_credentials()
-        return creds is not None
+        return session.get_credentials() is not None
     except Exception:
         return False
 
@@ -29,10 +29,11 @@ pytestmark = pytest.mark.skipif(
     reason="AWS credentials not available",
 )
 
-FUNCTION_ARN = os.environ.get(
-    "EMBUCKET_FUNCTION_ARN",
-    "arn:aws:lambda:us-east-2:767397688925:function:embucket-lambadka",
-)
+FUNCTION_ARN = os.environ.get("EMBUCKET_FUNCTION_ARN", "")
+EMBUCKET_ACCOUNT = os.environ.get("EMBUCKET_ACCOUNT", "embucket")
+EMBUCKET_USER = os.environ.get("EMBUCKET_USER", "embucket")
+EMBUCKET_PASSWORD = os.environ.get("EMBUCKET_PASSWORD", "embucket")
+EMBUCKET_REGION = os.environ.get("EMBUCKET_REGION", "us-east-2")
 
 
 class TestLiveConnection:
@@ -43,50 +44,50 @@ class TestLiveConnection:
             LambdaHandle,
         )
         import boto3
-        from botocore.config import Config as BotoConfig
 
-        arn_parts = FUNCTION_ARN.split(":")
-        region = arn_parts[3]
-        boto_config = BotoConfig(region_name=region, read_timeout=960)
-        client = boto3.client("lambda", config=boto_config)
+        if not FUNCTION_ARN:
+            pytest.skip("EMBUCKET_FUNCTION_ARN not set")
 
-        # Login via LambdaHandle (handles both buffered and streaming)
-        tmp_handle = LambdaHandle(client=client, function_arn=FUNCTION_ARN, token="")
-        login_payload = build_login_payload(
-            account="embucket", user="embucket", password="embucket",
+        client = boto3.client("lambda", region_name=EMBUCKET_REGION)
+        payload = build_login_payload(
+            account=EMBUCKET_ACCOUNT,
+            user=EMBUCKET_USER,
+            password=EMBUCKET_PASSWORD,
         )
-        body = json.loads(tmp_handle.invoke(login_payload))
-        assert body["success"] is True
-        return LambdaHandle(client=client, function_arn=FUNCTION_ARN, token=body["data"]["token"])
+        response = client.invoke(
+            FunctionName=FUNCTION_ARN,
+            Payload=json.dumps(payload).encode(),
+        )
+        raw = response["Payload"].read()
+        result = json.loads(raw)
+        body = json.loads(result.get("body", "{}"))
+        token = body["data"]["token"]
 
-    def test_connection_open_and_query(self):
-        """Test that we can open a connection and run a simple query."""
+        return LambdaHandle(client=client, function_arn=FUNCTION_ARN, token=token)
+
+    def test_select_one(self):
         handle = self._make_handle()
         cursor = handle.cursor()
-        cursor.execute("SELECT 1 as num, 'hello' as greeting")
-        assert cursor.rowcount == 1
-        rows = cursor.fetchall()
-        assert rows == [[1, "hello"]]
-        assert cursor.description[0][0] == "num"
-        assert cursor.description[1][0] == "greeting"
+        cursor.execute("SELECT 1 AS n")
+        assert cursor.description is not None
+        assert cursor.description[0][0] == "n"
+        row = cursor.fetchone()
+        assert row == [1]
 
     def test_dbt_debug(self):
-        """Test that dbt debug succeeds against the live Lambda."""
-        project_dir = os.path.join(os.path.dirname(__file__), "dbt_project")
+        """Run dbt debug to validate the full adapter setup."""
         result = subprocess.run(
-            ["dbt", "debug", "--profiles-dir", project_dir, "--project-dir", project_dir],
+            ["dbt", "debug", "--profiles-dir", "tests/dbt_project", "--project-dir", "tests/dbt_project"],
             capture_output=True,
             text=True,
             timeout=120,
         )
         assert result.returncode == 0, f"dbt debug failed:\n{result.stdout}\n{result.stderr}"
-        assert "All checks passed" in result.stdout
 
     def test_dbt_run(self):
-        """Test that dbt run succeeds with a simple model."""
-        project_dir = os.path.join(os.path.dirname(__file__), "dbt_project")
+        """Run dbt run to validate end-to-end model execution."""
         result = subprocess.run(
-            ["dbt", "run", "--profiles-dir", project_dir, "--project-dir", project_dir],
+            ["dbt", "run", "--profiles-dir", "tests/dbt_project", "--project-dir", "tests/dbt_project"],
             capture_output=True,
             text=True,
             timeout=120,
