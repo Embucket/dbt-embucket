@@ -30,6 +30,10 @@ pytestmark = pytest.mark.skipif(
 )
 
 FUNCTION_ARN = os.environ.get("EMBUCKET_FUNCTION_ARN", "")
+EMBUCKET_ACCOUNT = os.environ.get("EMBUCKET_ACCOUNT", "embucket")
+EMBUCKET_USER = os.environ.get("EMBUCKET_USER", "embucket")
+EMBUCKET_PASSWORD = os.environ.get("EMBUCKET_PASSWORD", "embucket")
+EMBUCKET_REGION = os.environ.get("EMBUCKET_REGION", "us-east-2")
 
 
 class TestLiveConnection:
@@ -44,11 +48,11 @@ class TestLiveConnection:
         if not FUNCTION_ARN:
             pytest.skip("EMBUCKET_FUNCTION_ARN not set")
 
-        client = boto3.client("lambda", region_name="us-east-2")
+        client = boto3.client("lambda", region_name=EMBUCKET_REGION)
         payload = build_login_payload(
-            account="embucket",
-            user="embucket",
-            password="embucket",
+            account=EMBUCKET_ACCOUNT,
+            user=EMBUCKET_USER,
+            password=EMBUCKET_PASSWORD,
         )
         response = client.invoke(
             FunctionName=FUNCTION_ARN,
