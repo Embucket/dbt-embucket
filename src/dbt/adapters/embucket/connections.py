@@ -97,6 +97,33 @@ def build_query_payload(sql: str, token: str) -> dict:
     }
 
 
+def _parse_embucket_timestamp(val: str) -> datetime:
+    """Parse Embucket's timestamp formats into Python datetime.
+
+    Embucket JSON format returns timestamps as:
+    - timestamp_ntz: epoch seconds as float, e.g. "1757843994.302000"
+    - timestamp_tz:  epoch seconds + space + tz offset, e.g. "1757843994.302000 1440"
+      where the offset is UTC minutes + 1440 normalization
+
+    Falls back to ISO format parsing if epoch parsing fails.
+    """
+    # Handle timestamp_tz format: "epoch.fraction offset"
+    parts = val.split(" ")
+    try:
+        epoch = float(parts[0])
+        return datetime.utcfromtimestamp(epoch)
+    except (ValueError, OSError):
+        pass
+    # Fall back to ISO format parsing
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(val, fmt)
+        except ValueError:
+            continue
+    # Return original string if nothing works
+    return val
+
+
 class LambdaCursor:
     """A DB-API 2.0-like cursor that executes SQL via Lambda invoke."""
 
@@ -204,18 +231,7 @@ class LambdaCursor:
                 continue
             val = coerced[i]
             if target_type == "timestamp" and isinstance(val, str):
-                try:
-                    # Embucket returns timestamps as epoch seconds (e.g. "1757843994.302000")
-                    epoch = float(val)
-                    coerced[i] = datetime.utcfromtimestamp(epoch)
-                except (ValueError, OSError):
-                    # Fall back to ISO format parsing
-                    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-                        try:
-                            coerced[i] = datetime.strptime(val, fmt)
-                            break
-                        except ValueError:
-                            continue
+                coerced[i] = _parse_embucket_timestamp(val)
             elif target_type == "boolean" and isinstance(val, str):
                 coerced[i] = val.upper() in ("TRUE", "1", "T")
         return coerced
