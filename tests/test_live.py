@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(
 
 FUNCTION_ARN = os.environ.get(
     "EMBUCKET_FUNCTION_ARN",
-    "arn:aws:lambda:us-east-2:767397688925:function:embucket-lambadka",
+    "arn:aws:lambda:us-east-2:767397688925:function:embucket-lambda-sturukin_10g",
 )
 
 
@@ -97,7 +97,7 @@ class TestLiveConnection:
         """Verify SHOW TERSE SCHEMAS is used (Snowflake macro), not information_schema query (default)."""
         handle = self._make_handle()
         cursor = handle.cursor()
-        cursor.execute("SHOW TERSE SCHEMAS IN DATABASE embucket")
+        cursor.execute("SHOW TERSE SCHEMAS IN DATABASE demo")
         assert cursor.description is not None
         col_names = [col[0] for col in cursor.description]
         assert "name" in col_names, f"Expected 'name' column in SHOW SCHEMAS output, got: {col_names}"
