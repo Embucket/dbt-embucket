@@ -114,12 +114,42 @@ class LambdaCursor:
         if self._handle is None:
             raise DbtRuntimeError("Cannot execute: no connection handle")
 
+        if bindings is not None:
+            sql = self._interpolate_bindings(sql, bindings)
+
         payload = build_query_payload(
             sql=sql,
             token=self._handle.token,
         )
         response = self._handle.invoke(payload)
         self._parse_response(response)
+
+    @staticmethod
+    def _interpolate_bindings(sql: str, bindings: list) -> str:
+        """Replace %s placeholders with properly escaped literal values.
+
+        The Snowflake adapter uses parameterized queries (%s placeholders)
+        for seeds, but Lambda invoke doesn't support server-side binding.
+        We interpolate values client-side with proper escaping.
+        """
+        parts = sql.split("%s")
+        if len(parts) - 1 != len(bindings):
+            raise DbtRuntimeError(
+                f"Binding count mismatch: {len(parts) - 1} placeholders vs {len(bindings)} values"
+            )
+        result = parts[0]
+        for i, val in enumerate(bindings):
+            if val is None:
+                result += "NULL"
+            elif isinstance(val, bool):
+                result += "TRUE" if val else "FALSE"
+            elif isinstance(val, (int, float)):
+                result += str(val)
+            else:
+                escaped = str(val).replace("'", "''")
+                result += f"'{escaped}'"
+            result += parts[i + 1]
+        return result
 
     def _parse_response(self, response_body: str) -> None:
         """Parse a Snowflake V1 JSON response into cursor state."""

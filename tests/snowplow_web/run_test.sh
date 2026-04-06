@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORK_DIR="$SCRIPT_DIR/work"
 
-FUNCTION_ARN="${EMBUCKET_FUNCTION_ARN:-arn:aws:lambda:us-east-2:767397688925:function:embucket-lambda-sturukin_10g}"
+FUNCTION_ARN="${EMBUCKET_FUNCTION_ARN:?Set EMBUCKET_FUNCTION_ARN env var}"
 DATABASE="demo"
 
 echo ""
